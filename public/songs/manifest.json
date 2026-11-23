@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "songs": [
+    {
+      "id": "matsuri-first-beat",
+      "title": "夏祭り・初陣",
+      "subtitle": "Matsuri First Beat (Built-in)",
+      "genre": "Namco Original",
+      "genreId": 6,
+      "bpm": 128,
+      "chartUrl": "/songs/matsuri-first-beat/main.tja",
+      "audioUrl": "/songs/matsuri-first-beat/main.m4a",
+      "demoStart": 23.44,
+      "courses": {
+        "easy": 2,
+        "normal": 4,
+        "hard": 6,
+        "oni": 8
+      }
+    },
+    {
+      "id": "sakura-wind-taiko",
+      "title": "桜風・疾風太鼓",
+      "subtitle": "Sakura Wind Taiko (Built-in)",
+      "genre": "Anime",
+      "genreId": 1,
+      "bpm": 160,
+      "chartUrl": "/songs/sakura-wind-taiko/main.tja",
+      "audioUrl": "/songs/sakura-wind-taiko/main.m4a",
+      "demoStart": 21.75,
+      "courses": {
+        "easy": 3,
+        "normal": 5,
+        "hard": 7,
+        "oni": 9
+      }
+    },
+    {
+      "id": "calibration-groove",
+      "title": "节奏校准・初鼓",
+      "subtitle": "Calibration & Practice Groove (Built-in)",
+      "genre": "Variety",
+      "genreId": 3,
+      "bpm": 120,
+      "chartUrl": "/songs/calibration-groove/main.tja",
+      "audioUrl": "/songs/calibration-groove/main.m4a",
+      "demoStart": 9.0,
+      "courses": {
+        "easy": 1,
+        "normal": 3,
+        "hard": 5
+      }
+    }
+  ]
+}

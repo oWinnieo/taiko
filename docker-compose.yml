@@ -1,0 +1,8 @@
+services:
+  taiko-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3113}:80"
