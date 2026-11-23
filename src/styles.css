@@ -596,7 +596,69 @@ button:active {
 
 .detail-cta {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.drum-nav-hint {
+  font-size: 13px;
+  color: #ffe39b;
+  background: rgba(255, 216, 77, 0.12);
+  border: 1px solid rgba(255, 216, 77, 0.35);
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+.pill-drum {
+  background: linear-gradient(90deg, #34d399, #10b981);
+  color: #052e16;
+}
+
+.drum-focused {
+  outline: 4px solid #ffd84d !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(255, 216, 77, 0.25), 0 0 26px rgba(255, 216, 77, 0.55) !important;
+  transform: scale(1.03);
+}
+
+.pane-stage-active {
+  border-color: rgba(255, 216, 77, 0.55);
+}
+
+.pane-stage-dim {
+  opacity: 0.78;
+}
+
+.course-back-card {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  justify-content: center;
+}
+
+.course-back-icon {
+  font-size: 28px;
+  line-height: 1;
+  color: #ffd84d;
+}
+
+.pause-drum-hint {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: #d8d3ea;
+}
+
+.gamepad-status-box {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+
+.gamepad-ok {
+  color: #6ee7b7;
+  font-weight: 700;
 }
 
 .drop-overlay {

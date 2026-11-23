@@ -43,6 +43,7 @@ export interface GameSettings {
   sfxVolume: number; // 0..1
   voiceVolume: number; // 0..1
   audioOffsetMs: number; // -250..250
+  gamepadDebounceMs: number; // 0..60 per-sensor debounce for drum controllers
   showTouchDrum: boolean;
   showDebugHud: boolean;
 }
@@ -59,6 +60,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   sfxVolume: 0.92,
   voiceVolume: 0.85,
   audioOffsetMs: 0,
+  gamepadDebounceMs: 25,
   showTouchDrum: false,
   showDebugHud: false,
 };

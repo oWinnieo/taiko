@@ -126,6 +126,8 @@ export const App: React.FC = () => {
     <div className="app-root">
       {screen.view === 'title' && (
         <TitleScreen
+          keyBindings={settings.keyBindings}
+          menuDisabled={settingsOpen}
           onStart={() => void handleEnterSelect()}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -136,6 +138,8 @@ export const App: React.FC = () => {
           songs={songs}
           scores={scores}
           mods={mods}
+          keyBindings={settings.keyBindings}
+          menuDisabled={settingsOpen}
           selectedSongId={selectedSongId}
           selectedCourse={selectedCourse}
           onSelectSong={setSelectedSongId}
@@ -169,6 +173,7 @@ export const App: React.FC = () => {
           courseId={screen.courseId}
           result={screen.result}
           isNewRecord={screen.isNewRecord}
+          keyBindings={settings.keyBindings}
           onRetry={() => void handlePlay(screen.song, screen.courseId)}
           onBackSelect={() => setScreen({ view: 'select' })}
         />

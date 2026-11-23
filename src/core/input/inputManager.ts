@@ -1,5 +1,6 @@
 import { DrumHand, DrumSide } from '../audio/audioEngine';
 import { KeyBindings } from '../../platform/types';
+import { GamepadDrumPoller } from './gamepadPoller';
 
 export interface InputCallbacks {
   onStrike: (side: DrumSide, hand: DrumHand) => void;
@@ -10,16 +11,21 @@ export interface InputCallbacks {
 export class InputManager {
   private bindings: KeyBindings;
   private callbacks: InputCallbacks;
-  private prevGamepadButtons = new Map<number, boolean[]>();
+  private gamepadPoller: GamepadDrumPoller;
   private attached = false;
 
-  constructor(bindings: KeyBindings, callbacks: InputCallbacks) {
+  constructor(bindings: KeyBindings, callbacks: InputCallbacks, gamepadDebounceMs = 25) {
     this.bindings = { ...bindings };
     this.callbacks = callbacks;
+    this.gamepadPoller = new GamepadDrumPoller(gamepadDebounceMs);
   }
 
   updateBindings(bindings: KeyBindings): void {
     this.bindings = { ...bindings };
+  }
+
+  setGamepadDebounceMs(ms: number): void {
+    this.gamepadPoller.setDebounceMs(ms);
   }
 
   attach(): void {
@@ -67,37 +73,9 @@ export class InputManager {
    * Poll connected Gamepad / TaTaCon controllers on each animation frame.
    */
   pollGamepads(): void {
-    if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return;
-    const pads = navigator.getGamepads();
-    for (const pad of pads) {
-      if (!pad) continue;
-      const prev = this.prevGamepadButtons.get(pad.index) ?? [];
-      const curr = pad.buttons.map((b) => b.pressed);
-
-      const justPressed = (idx: number) => Boolean(curr[idx] && !prev[idx]);
-
-      // Standard gamepad + Switch TaTaCon common button mapping:
-      // Left Don: D-pad Down/Right (13, 15) or L3 (10)
-      // Right Don: Face Down/Left (0, 2) or R3 (11)
-      // Left Kat: L1/L2 (4, 6) or D-pad Left/Up (14, 12)
-      // Right Kat: R1/R2 (5, 7) or Face Right/Up (1, 3)
-      if (justPressed(13) || justPressed(15) || justPressed(10)) {
-        this.callbacks.onStrike('don', 'left');
-      }
-      if (justPressed(0) || justPressed(2) || justPressed(11)) {
-        this.callbacks.onStrike('don', 'right');
-      }
-      if (justPressed(4) || justPressed(6) || justPressed(14) || justPressed(12)) {
-        this.callbacks.onStrike('ka', 'left');
-      }
-      if (justPressed(5) || justPressed(7) || justPressed(1) || justPressed(3)) {
-        this.callbacks.onStrike('ka', 'right');
-      }
-      if (justPressed(9)) {
-        this.callbacks.onPauseToggle();
-      }
-
-      this.prevGamepadButtons.set(pad.index, curr);
-    }
+    this.gamepadPoller.poll({
+      onStrike: this.callbacks.onStrike,
+      onPause: this.callbacks.onPauseToggle,
+    });
   }
 }

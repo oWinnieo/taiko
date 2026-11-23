@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine, DRUM_PACKS } from '../core/audio/audioEngine';
+import { ConnectedGamepadInfo, getConnectedGamepads } from '../core/input/gamepadPoller';
 import { GameSettings, KeyBindings } from '../platform/types';
 
 interface SettingsModalProps {
@@ -17,6 +18,13 @@ const KEY_FIELDS: Array<{ field: keyof KeyBindings; label: string; color: string
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onChange, onClose }) => {
   const [rebinding, setRebinding] = useState<keyof KeyBindings | null>(null);
+  const [gamepads, setGamepads] = useState<ConnectedGamepadInfo[]>(() => getConnectedGamepads());
+
+  useEffect(() => {
+    const sync = () => setGamepads(getConnectedGamepads());
+    const id = window.setInterval(sync, 800);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Calibration state (120 BPM = 500ms interval)
   const [calibrating, setCalibrating] = useState(false);
@@ -268,6 +276,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onChange
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Gamepad / TaTaCon Peripheral */}
+          <div className="settings-section">
+            <h4>🥁 太鼓外设 / 手柄（支持 NS TaTaCon）</h4>
+            <div className="gamepad-status-box">
+              {gamepads.length > 0 ? (
+                <span className="gamepad-ok">
+                  已连接：{gamepads.map((g) => g.id).join(' / ')}（菜单中 左/右咔切换 · 咚确认）
+                </span>
+              ) : (
+                <span className="muted">
+                  未检测到外设（接入 USB 太鼓后，请轻敲一下鼓面以激活浏览器识别）
+                </span>
+              )}
+            </div>
+            <label className="offset-slider" style={{ marginTop: 10 }}>
+              <span>外设防连震消抖：{settings.gamepadDebounceMs ?? 25} ms</span>
+              <input
+                type="range"
+                min={0}
+                max={60}
+                step={5}
+                value={settings.gamepadDebounceMs ?? 25}
+                onChange={(e) =>
+                  onChange({ ...settings, gamepadDebounceMs: parseInt(e.target.value, 10) })
+                }
+              />
+            </label>
           </div>
 
           {/* Toggles */}

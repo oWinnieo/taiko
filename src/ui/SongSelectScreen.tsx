@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../core/audio/audioEngine';
 import { COURSE_LABELS, COURSE_ORDER, CourseId, GameMods } from '../core/chart/types';
-import { ScoreKey, ScoreRecord, SongCatalogEntry } from '../platform/types';
+import { useDrumMenuInput } from '../core/input/useDrumMenuInput';
+import { KeyBindings, ScoreKey, ScoreRecord, SongCatalogEntry } from '../platform/types';
 import { importLocalTjaFiles, loadSongAudioBuffer } from '../services/songService';
 
 interface SongSelectScreenProps {
   songs: SongCatalogEntry[];
   scores: Record<ScoreKey, ScoreRecord>;
   mods: GameMods;
+  keyBindings: KeyBindings;
+  menuDisabled?: boolean;
   selectedSongId: string;
   selectedCourse: CourseId;
   onSelectSong: (songId: string) => void;
@@ -26,6 +29,8 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
   songs,
   scores,
   mods,
+  keyBindings,
+  menuDisabled = false,
   selectedSongId,
   selectedCourse,
   onSelectSong,
@@ -40,8 +45,13 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
   const [dragging, setDragging] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [previewMuted, setPreviewMuted] = useState(false);
+  // Switch-style two-stage selection: 'song' -> hit Don -> 'course' (Back or difficulty) -> hit Don -> Play!
+  const [stage, setStage] = useState<'song' | 'course'>('song');
+  const [courseCursor, setCourseCursor] = useState<number>(1); // 0 = Back to song list, 1..N = availableCourses
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewReqId = useRef(0);
+  const activeSongItemRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? songs[0] ?? null;
   const availableCourses = selectedSong
@@ -50,6 +60,20 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
   const activeCourse: CourseId = availableCourses.includes(selectedCourse)
     ? selectedCourse
     : (availableCourses[0] ?? 'normal');
+
+  // Keep selected song scrolled into view when navigating by drum
+  useEffect(() => {
+    activeSongItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedSong?.id]);
+
+  // Sync courseCursor when entering course stage
+  const enterCourseStage = () => {
+    if (!selectedSong || availableCourses.length === 0) return;
+    const idx = availableCourses.indexOf(activeCourse);
+    setCourseCursor(idx >= 0 ? idx + 1 : 1);
+    setStage('course');
+    void audioEngine.playVoice('v_diffsel');
+  };
 
   // Auto play song preview when selection changes
   useEffect(() => {
@@ -76,47 +100,76 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
     };
   }, []);
 
-  // Keyboard navigation on song select
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-      if (songs.length === 0) return;
+  const startSelectedCourse = (courseToPlay: CourseId) => {
+    if (!selectedSong) return;
+    audioEngine.stopPreview();
+    void audioEngine.playVoice('v_start');
+    onPlay(selectedSong, courseToPlay);
+  };
 
-      const idx = Math.max(
-        0,
-        songs.findIndex((s) => s.id === selectedSong?.id),
-      );
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const next = songs[(idx - 1 + songs.length) % songs.length];
-        audioEngine.playDrum('ka', 'left');
-        onSelectSong(next.id);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const next = songs[(idx + 1) % songs.length];
-        audioEngine.playDrum('ka', 'right');
-        onSelectSong(next.id);
-      } else if (e.key === 'ArrowLeft' && availableCourses.length > 0) {
-        e.preventDefault();
-        const ci = availableCourses.indexOf(activeCourse);
-        const next = availableCourses[(ci - 1 + availableCourses.length) % availableCourses.length];
-        audioEngine.playSynthSfx('menuMove');
-        onSelectCourse(next);
-      } else if (e.key === 'ArrowRight' && availableCourses.length > 0) {
-        e.preventDefault();
-        const ci = availableCourses.indexOf(activeCourse);
-        const next = availableCourses[(ci + 1) % availableCourses.length];
-        audioEngine.playSynthSfx('menuMove');
-        onSelectCourse(next);
-      } else if (e.key === 'Enter' && selectedSong) {
-        e.preventDefault();
-        audioEngine.playDrum('don', 'both');
-        onPlay(selectedSong, activeCourse);
+  // Switch-style TaTaCon & Keyboard menu navigation
+  const gamepads = useDrumMenuInput({
+    enabled: !menuDisabled,
+    keyBindings,
+    graceMs: 200,
+    onPrev: () => {
+      if (stage === 'song') {
+        if (songs.length === 0) return;
+        const idx = Math.max(
+          0,
+          songs.findIndex((s) => s.id === selectedSong?.id),
+        );
+        const prev = songs[(idx - 1 + songs.length) % songs.length];
+        onSelectSong(prev.id);
+      } else {
+        const total = availableCourses.length + 1; // index 0 = Back
+        const nextIdx = (courseCursor - 1 + total) % total;
+        setCourseCursor(nextIdx);
+        if (nextIdx > 0) {
+          onSelectCourse(availableCourses[nextIdx - 1]);
+        }
       }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [songs, selectedSong, availableCourses, activeCourse, onSelectSong, onSelectCourse, onPlay]);
+    },
+    onNext: () => {
+      if (stage === 'song') {
+        if (songs.length === 0) return;
+        const idx = Math.max(
+          0,
+          songs.findIndex((s) => s.id === selectedSong?.id),
+        );
+        const next = songs[(idx + 1) % songs.length];
+        onSelectSong(next.id);
+      } else {
+        const total = availableCourses.length + 1;
+        const nextIdx = (courseCursor + 1) % total;
+        setCourseCursor(nextIdx);
+        if (nextIdx > 0) {
+          onSelectCourse(availableCourses[nextIdx - 1]);
+        }
+      }
+    },
+    onConfirm: () => {
+      if (stage === 'song') {
+        enterCourseStage();
+      } else {
+        if (courseCursor === 0) {
+          setStage('song');
+        } else {
+          const chosen = availableCourses[courseCursor - 1] ?? activeCourse;
+          onSelectCourse(chosen);
+          startSelectedCourse(chosen);
+        }
+      }
+    },
+    onCancel: () => {
+      if (stage === 'course') {
+        setStage('song');
+      } else {
+        audioEngine.stopPreview();
+        onBackTitle();
+      }
+    },
+  });
 
   const handleImportFiles = async (files: FileList | File[]) => {
     setImportStatus('正在解析并保存 TJA 曲包...');
@@ -172,7 +225,12 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
           >
             ← 标题页
           </button>
-          <h2 className="page-title">选择曲目</h2>
+          <h2 className="page-title">
+            {stage === 'song' ? '第一步：选择曲目' : '第二步：选择难度'}
+          </h2>
+          {gamepads.length > 0 && (
+            <span className="festival-pill pill-drum">🥁 外设已连接</span>
+          )}
         </div>
 
         <div className="top-bar-right">
@@ -225,9 +283,11 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
 
       <div className="select-layout">
         {/* Left: Song list */}
-        <aside className="song-list-pane">
+        <aside className={`song-list-pane ${stage === 'song' ? 'pane-stage-active' : 'pane-stage-dim'}`}>
           <div className="pane-hint">
-            支持方向键选歌 · 可将本地 <code>.tja + .ogg/.mp3</code> 拖入窗口直接游玩
+            {stage === 'song'
+              ? '🔵 左/右咔切歌 · 🔴 咚进入选难度 · 可拖入本地 .tja 曲包'
+              : '正在选择右侧难度（敲「返回选歌」可回到列表）'}
           </div>
           <div className="song-list">
             {songs.map((song) => {
@@ -235,9 +295,11 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
               return (
                 <div
                   key={song.id}
-                  className={`song-item ${active ? 'song-item-active' : ''}`}
+                  ref={active ? activeSongItemRef : null}
+                  className={`song-item ${active ? 'song-item-active' : ''} ${active && stage === 'song' ? 'drum-focused' : ''}`}
                   onClick={() => {
                     audioEngine.playDrum('ka', 'right');
+                    setStage('song');
                     onSelectSong(song.id);
                   }}
                 >
@@ -292,7 +354,7 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
         </aside>
 
         {/* Right: Detail, difficulties & mods */}
-        <section className="song-detail-pane">
+        <section className={`song-detail-pane ${stage === 'course' ? 'pane-stage-active' : ''}`}>
           {selectedSong ? (
             <>
               <div className="detail-header">
@@ -304,19 +366,41 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
               </div>
 
               <div className="course-grid">
-                {availableCourses.map((cId) => {
+                {/* Slot 0 in course stage: Return to song list (just like NS/Arcade) */}
+                <button
+                  className={`course-card course-back-card ${stage === 'course' && courseCursor === 0 ? 'course-card-active drum-focused' : ''}`}
+                  onClick={() => {
+                    audioEngine.playSynthSfx('cancel');
+                    setStage('song');
+                  }}
+                >
+                  <div className="course-back-icon">↩</div>
+                  <div className="course-name">返回选歌</div>
+                  <div className="course-best">
+                    <span className="muted">敲咚回到曲目列表</span>
+                  </div>
+                </button>
+
+                {availableCourses.map((cId, idx) => {
                   const info = COURSE_LABELS[cId];
                   const level = selectedSong.courses[cId] ?? 1;
+                  const isFocused = stage === 'course' && courseCursor === idx + 1;
                   const isSel = cId === activeCourse;
                   const best = scores[`${selectedSong.id}::${cId}`];
                   return (
                     <button
                       key={cId}
-                      className={`course-card ${isSel ? 'course-card-active' : ''}`}
-                      style={{ borderColor: isSel ? '#ffd84d' : info.color }}
+                      className={`course-card ${isSel ? 'course-card-active' : ''} ${isFocused ? 'drum-focused' : ''}`}
+                      style={{ borderColor: isFocused ? '#ffd84d' : isSel ? '#ffd84d' : info.color }}
                       onClick={() => {
                         audioEngine.playSynthSfx('menuMove');
                         onSelectCourse(cId);
+                        setCourseCursor(idx + 1);
+                        setStage('course');
+                      }}
+                      onDoubleClick={() => {
+                        audioEngine.playDrum('don', 'both');
+                        startSelectedCourse(cId);
                       }}
                     >
                       <div
@@ -409,13 +493,18 @@ export const SongSelectScreen: React.FC<SongSelectScreenProps> = ({
               </div>
 
               <div className="detail-cta">
+                <div className="drum-nav-hint">
+                  {stage === 'song'
+                    ? '🥁 鼓操作：左/右咔切换曲目 · 咚确认选难度'
+                    : courseCursor === 0
+                      ? '🥁 鼓操作：右咔选难度 · 咚返回选歌列表'
+                      : '🥁 鼓操作：左/右咔切换难度 · 咚直接开打！'}
+                </div>
                 <button
                   className="btn-primary btn-xl"
                   onClick={() => {
-                    audioEngine.stopPreview();
                     audioEngine.playDrum('don', 'both');
-                    void audioEngine.playVoice('v_start');
-                    onPlay(selectedSong, activeCourse);
+                    startSelectedCourse(activeCourse);
                   }}
                 >
                   🥁 开始演奏（{COURSE_LABELS[activeCourse].zh} ★{selectedSong.courses[activeCourse]}）

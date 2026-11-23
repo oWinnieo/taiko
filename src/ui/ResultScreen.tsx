@@ -1,15 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { audioEngine } from '../core/audio/audioEngine';
 import { COURSE_LABELS, CourseId } from '../core/chart/types';
 import { GameResultSummary } from '../core/engine/gameEngine';
 import { SOUL_CLEAR_THRESHOLD, SOUL_MAX } from '../core/engine/judge';
-import { SongCatalogEntry } from '../platform/types';
+import { useDrumMenuInput } from '../core/input/useDrumMenuInput';
+import { KeyBindings, SongCatalogEntry } from '../platform/types';
 
 interface ResultScreenProps {
   song: SongCatalogEntry;
   courseId: CourseId;
   result: GameResultSummary;
   isNewRecord: boolean;
+  keyBindings: KeyBindings;
   onRetry: () => void;
   onBackSelect: () => void;
 }
@@ -19,9 +21,12 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   courseId,
   result,
   isNewRecord,
+  keyBindings,
   onRetry,
   onBackSelect,
 }) => {
+  const [focusIdx, setFocusIdx] = useState<0 | 1>(1); // Default focus on 返回选歌 (or switch with Kat)
+
   useEffect(() => {
     if (result.crown === 'donderful') {
       void audioEngine.playVoice('v_results_fullcombo2');
@@ -31,6 +36,20 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
       void audioEngine.playVoice('v_results');
     }
   }, [result.crown]);
+
+  // 600ms grace delay so end-of-song leftover strikes don't skip the result screen
+  useDrumMenuInput({
+    enabled: true,
+    keyBindings,
+    graceMs: 600,
+    onPrev: () => setFocusIdx((i) => (i === 0 ? 1 : 0)),
+    onNext: () => setFocusIdx((i) => (i === 0 ? 1 : 0)),
+    onConfirm: () => {
+      if (focusIdx === 0) onRetry();
+      else onBackSelect();
+    },
+    onCancel: onBackSelect,
+  });
 
   const cInfo = COURSE_LABELS[courseId];
   const soulPct = Math.round((result.soul / SOUL_MAX) * 100);
@@ -63,7 +82,6 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           <div className="result-score-value">{result.score.toLocaleString()}</div>
         </div>
 
-        {/* Soul bar */}
         <div className="result-soul-wrap">
           <div className="result-soul-meta">
             <span>魂槽：{soulPct}%</span>
@@ -78,7 +96,6 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           </div>
         </div>
 
-        {/* Stats grid */}
         <div className="result-stats-grid">
           <div className="stat-box stat-good">
             <span>良</span>
@@ -108,7 +125,8 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
 
         <div className="result-actions">
           <button
-            className="btn-primary btn-lg"
+            className={`btn-primary btn-lg ${focusIdx === 0 ? 'drum-focused' : ''}`}
+            onMouseEnter={() => setFocusIdx(0)}
             onClick={() => {
               audioEngine.playDrum('don', 'both');
               onRetry();
@@ -117,7 +135,8 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             🥁 再来一局
           </button>
           <button
-            className="btn-secondary btn-lg"
+            className={`btn-secondary btn-lg ${focusIdx === 1 ? 'drum-focused' : ''}`}
+            onMouseEnter={() => setFocusIdx(1)}
             onClick={() => {
               audioEngine.playSynthSfx('menuDecide');
               onBackSelect();
@@ -126,6 +145,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             返回选歌
           </button>
         </div>
+        <div className="pause-drum-hint">🔵 左/右咔切换 · 🔴 咚确认</div>
       </div>
     </div>
   );

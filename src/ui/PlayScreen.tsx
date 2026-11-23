@@ -3,6 +3,7 @@ import { audioEngine, DrumHand, DrumSide } from '../core/audio/audioEngine';
 import { PlayableChart, GameMods } from '../core/chart/types';
 import { GameResultSummary, TaikoGameEngine } from '../core/engine/gameEngine';
 import { InputManager } from '../core/input/inputManager';
+import { useDrumMenuInput } from '../core/input/useDrumMenuInput';
 import { CanvasRenderer } from '../core/renderer/canvasRenderer';
 import { GameSettings } from '../platform/types';
 
@@ -30,10 +31,36 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<TaikoGameEngine | null>(null);
   const [paused, setPaused] = useState(false);
+  const [pauseFocus, setPauseFocus] = useState<0 | 1 | 2>(0);
   const [autoOn, setAutoOn] = useState(mods.autoPlay);
   const [touchDrumVisible, setTouchDrumVisible] = useState(
     () => settings.showTouchDrum || (typeof window !== 'undefined' && 'ontouchstart' in window),
   );
+
+  // Switch-style drum navigation while paused
+  useDrumMenuInput({
+    enabled: paused,
+    keyBindings: settings.keyBindings,
+    graceMs: 260,
+    onPrev: () => setPauseFocus((i) => ((i + 2) % 3) as 0 | 1 | 2),
+    onNext: () => setPauseFocus((i) => ((i + 1) % 3) as 0 | 1 | 2),
+    onConfirm: () => {
+      if (pauseFocus === 0) {
+        engineRef.current?.setPaused(false);
+        setPaused(false);
+      } else if (pauseFocus === 1) {
+        audioEngine.stopMusic();
+        onRestart();
+      } else {
+        audioEngine.stopMusic();
+        onExit();
+      }
+    },
+    onCancel: () => {
+      engineRef.current?.setPaused(false);
+      setPaused(false);
+    },
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -51,25 +78,34 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
     );
     engineRef.current = engine;
 
-    const input = new InputManager(settings.keyBindings, {
-      onStrike: (side, hand) => engine.handleStrike(side, hand),
-      onPauseToggle: () => {
-        const next = !engine.isPaused();
-        engine.setPaused(next);
-        setPaused(next);
+    const input = new InputManager(
+      settings.keyBindings,
+      {
+        onStrike: (side, hand) => {
+          if (!engine.isPaused()) engine.handleStrike(side, hand);
+        },
+        onPauseToggle: () => {
+          const next = !engine.isPaused();
+          engine.setPaused(next);
+          if (next) setPauseFocus(0);
+          setPaused(next);
+        },
+        onAutoToggle: () => {
+          const nextAuto = engine.toggleAutoPlay();
+          setAutoOn(nextAuto);
+        },
       },
-      onAutoToggle: () => {
-        const nextAuto = engine.toggleAutoPlay();
-        setAutoOn(nextAuto);
-      },
-    });
+      settings.gamepadDebounceMs ?? 25,
+    );
 
     input.attach();
     audioEngine.startMusic(audioBuffer, 1600);
 
     let rafId = 0;
     const loop = (ts: number) => {
-      input.pollGamepads();
+      if (!engine.isPaused()) {
+        input.pollGamepads();
+      }
       const snap = engine.update();
       renderer.render(snap, ts);
       rafId = window.requestAnimationFrame(loop);
@@ -87,7 +123,6 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
   const handleTouchDrumPointer = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    // Drum circle center sits at bottom-center of the touch drum area
     const cx = rect.left + rect.width / 2;
     const cy = rect.bottom;
     const dx = e.clientX - cx;
@@ -104,7 +139,6 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
     <div className="screen play-screen">
       <canvas ref={canvasRef} className="game-canvas" />
 
-      {/* Minimal top-left / top-right controls */}
       <div className="play-controls">
         <button
           className="hud-btn"
@@ -113,6 +147,7 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
             if (!eng) return;
             const next = !eng.isPaused();
             eng.setPaused(next);
+            if (next) setPauseFocus(0);
             setPaused(next);
           }}
         >
@@ -136,7 +171,6 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
         </button>
       </div>
 
-      {/* Optional interactive touch / mouse drum */}
       {touchDrumVisible && (
         <div
           className="touch-drum-zone"
@@ -152,7 +186,6 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
         </div>
       )}
 
-      {/* Pause Overlay */}
       {paused && (
         <div className="modal-backdrop">
           <div className="pause-modal">
@@ -160,7 +193,8 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
             <p className="pause-song-name">{chart.meta.title}</p>
             <div className="pause-actions">
               <button
-                className="btn-primary"
+                className={`btn-primary ${pauseFocus === 0 ? 'drum-focused' : ''}`}
+                onMouseEnter={() => setPauseFocus(0)}
                 onClick={() => {
                   engineRef.current?.setPaused(false);
                   setPaused(false);
@@ -169,7 +203,8 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
                 继续演奏
               </button>
               <button
-                className="btn-secondary"
+                className={`btn-secondary ${pauseFocus === 1 ? 'drum-focused' : ''}`}
+                onMouseEnter={() => setPauseFocus(1)}
                 onClick={() => {
                   audioEngine.stopMusic();
                   onRestart();
@@ -178,7 +213,8 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
                 重新开始
               </button>
               <button
-                className="btn-ghost"
+                className={`btn-ghost ${pauseFocus === 2 ? 'drum-focused' : ''}`}
+                onMouseEnter={() => setPauseFocus(2)}
                 onClick={() => {
                   audioEngine.stopMusic();
                   onExit();
@@ -187,6 +223,7 @@ export const PlayScreen: React.FC<PlayScreenProps> = ({
                 返回选歌
               </button>
             </div>
+            <div className="pause-drum-hint">🔵 左/右咔切换 · 🔴 咚确认</div>
           </div>
         </div>
       )}
